@@ -203,3 +203,21 @@ body {
   line-height: 2.4rem;
   color: rgba(222, 222, 222, 1);
 }
+
+.add-video-url-btn {
+  background-color: #4CAF50; /* Green background */
+  color: white; /* White text */
+  padding: 7px 10px;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  margin-left: "10px";
+  margin-right: "10px";
+  padding: "6px 12px";
+  border-Radius: "4px";
+  cursor: "pointer"; 
+}
+
+.add-video-url-btn:hover {
+  background-color: #45a049; /* Darker green on hover */
+}

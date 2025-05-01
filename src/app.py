@@ -9,6 +9,7 @@ def process():
     data = request.get_json()
     video_url = data.get('video_url')
     query = data.get('query')
+    
     print(f"Received video_url: {video_url}")
     print(f"Received query: {query}")
     
