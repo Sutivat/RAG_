@@ -2,9 +2,6 @@ import './App.css';
 import raglogo from './assests/raglogo.png';
 import addBtn from './assests/add-30.png';
 import msgIcon from './assests/message.svg';
-import home from './assests/home.svg';
-import saved from './assests/bookmark.svg';
-import rocket from './assests/rocket.svg';
 import sendBtn from './assests/send.svg';
 import userIcon from './assests/user-icon.png';
 import gptImgLogo from './assests/chatgptLogo.svg';
@@ -16,27 +13,24 @@ function App() {
   const [query, setQuery] = useState("");
   const [loading, setLoading] = useState(false);
   const [showVideoUrlInput, setShowVideoUrlInput] = useState(false);
-  const [rooms, setRooms] = useState([{ id: 1, name: "Room 1", messages: [{ text: "Hi good day", isAi: true }] }]);
+  const [askDirectly, setAskDirectly] = useState(false);
+  const [rooms, setRooms] = useState([
+    { id: 1, name: "Room 1", messages: [{ text: "Hi good day", isAi: true }] }
+  ]);
   const [currentRoomId, setCurrentRoomId] = useState(1);
+  const [expandedSteps, setExpandedSteps] = useState({});
   const msgEnd = useRef(null);
 
-  const sendMsgToRag = async (videoUrl, query) => {
-    setLoading(true);
-    try {
-      const res = await axios.post("http://localhost:5000/process", {
-        video_url: videoUrl,
-        query: query
-      });
-      return res.data;
-    } catch (error) {
-      console.error("Error fetching response", error);
-      return { response: "Sorry, there was an error." };
-    } finally {
-      setLoading(false);
-    }
-  };
+  const stepKeys = [
+    { key: "restatement", label: "Restatement" },
+    { key: "key_info", label: "Key Info" },
+    { key: "method", label: "Method" },
+    { key: "solution", label: "Solution" },
+    { key: "verification", label: "Verification" }
+  ];
 
   const currentRoom = rooms.find(r => r.id === currentRoomId);
+
   const updateMessagesForRoom = (newMessages) => {
     setRooms(prevRooms =>
       prevRooms.map(room =>
@@ -49,22 +43,62 @@ function App() {
     msgEnd.current?.scrollIntoView({ behavior: "smooth" });
   }, [rooms]);
 
+  const toggleStep = (msgIndex, key) => {
+    const id = `${msgIndex}-${key}`;
+    setExpandedSteps(prev => ({
+      ...prev,
+      [id]: !prev[id]
+    }));
+  };
+
+  const toggleVideoUrlInput = () => {
+    setShowVideoUrlInput(prev => !prev);
+  };
+
+  const toggleAskMode = () => {
+    setAskDirectly(prev => !prev);
+  };
+
   const handleSend = async () => {
     const text = query;
     setQuery('');
     const newMessages = [...currentRoom.messages, { text, isAi: false }];
     updateMessagesForRoom(newMessages);
 
-    const res = await sendMsgToRag(videoUrl, text);
-    updateMessagesForRoom([...newMessages, { text: res.response, isAi: true }]);
+    setLoading(true);
+    try {
+      let res;
+      if (askDirectly) {
+        res = await axios.post("http://localhost:5000/ask", {
+          query: text
+        });
+      } else {
+        res = await axios.post("http://localhost:5000/process", {
+          video_url: videoUrl,
+          query: text
+        });
+      }
+
+      const aiMessage = {
+        text: res.data.response || "No response",
+        isAi: true,
+        response_cleaned: res.data.response_cleaned || {},
+        references: res.data.references || []
+      };
+      updateMessagesForRoom([...newMessages, aiMessage]);
+    } catch (error) {
+      console.error("Error:", error);
+      updateMessagesForRoom([
+        ...newMessages,
+        { text: "Sorry, there was an error.", isAi: true }
+      ]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleEnter = async (e) => {
     if (e.key === 'Enter') await handleSend();
-  };
-
-  const toggleVideoUrlInput = () => {
-    setShowVideoUrlInput(prev => !prev);
   };
 
   const createNewRoom = () => {
@@ -97,33 +131,75 @@ function App() {
             ))}
           </div>
         </div>
-        <div className="lowerSide">
-          <div className="listItems"><img src={home} alt="" className="listitemsImg" />Home</div>
-          <div className="listItems"><img src={saved} alt="" className="listitemsImg" />Saved</div>
-          <div className="listItems"><img src={rocket} alt="" className="listitemsImg" />Upgrade to Pro</div>
-        </div>
       </div>
+
       <div className='main'>
         <div className="chats">
           {currentRoom.messages.map((message, i) => (
             <div key={i} className={message.isAi ? "chat ai" : "chat"}>
               <img src={message.isAi ? gptImgLogo : userIcon} alt="" className='chatImg' />
-              <p className="txt">{message.text}</p>
+              <div className="chat-content">
+                <p className="txt">{message.text}</p>
+
+                {/* Structured Response */}
+                {message.isAi && message.response_cleaned && (
+                  <div className="step-details">
+                    {stepKeys.map(({ key, label }) => (
+                      message.response_cleaned[key] ? (
+                        <div key={key} className="step-item">
+                          <button
+                            onClick={() => toggleStep(i, key)}
+                            className="toggle-button"
+                          >
+                            {expandedSteps[`${i}-${key}`] ? `Hide ${label}` : `Show ${label}`}
+                          </button>
+                          {expandedSteps[`${i}-${key}`] && (
+                            <p className="step-content">{message.response_cleaned[key]}</p>
+                          )}
+                        </div>
+                      ) : null
+                    ))}
+                  </div>
+                )}
+
+                {/* References */}
+                {message.isAi && message.references && message.references.length > 0 && (
+                  <div className="references">
+                    <h4>References:</h4>
+                    <ul>
+                      {message.references.map((ref, idx) => (
+                        <li key={idx} className="reference-item">
+                          {ref.content || "No content available"}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
             </div>
           ))}
           <div ref={msgEnd} />
         </div>
+
         <div className="chatFooter">
           <div className="inp">
             <button
               className="add-video-url-btn"
               onClick={toggleVideoUrlInput}
               style={{ marginRight: "10px" }}
+              disabled={askDirectly}
             >
               + Video URL
             </button>
+            <button
+              className="toggle-mode-btn"
+              onClick={toggleAskMode}
+              style={{ marginRight: "10px", backgroundColor: askDirectly ? "#4CAF50" : "#ccc" }}
+            >
+              {askDirectly ? "Direct AI Mode ✅" : "Smart AI Mode 🤖"}
+            </button>
 
-            {showVideoUrlInput && (
+            {showVideoUrlInput && !askDirectly && (
               <input
                 type="text"
                 placeholder="Enter video URL"
@@ -132,8 +208,7 @@ function App() {
                 style={{
                   width: "200px",
                   padding: "5px",
-                  borderRadius: "5px",
-                  marginTop: "10px"
+                  borderRadius: "5px"
                 }}
               />
             )}
@@ -149,6 +224,7 @@ function App() {
               <img src={sendBtn} alt="send" />
             </button>
           </div>
+          {loading && <p>Processing...</p>}
           <p>This may be uncorrect.</p>
         </div>
       </div>
